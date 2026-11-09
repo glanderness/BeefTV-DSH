@@ -96,7 +96,8 @@ async function refresh(page: Page) {
 }
 
 test('BeefTV Agent keeps the native conversation and sends the selected collaboration mode', async () => {
-  const { page, contexts } = await openWorkbench()
+  const state = await openWorkbench()
+  const { page, contexts } = state
   expect(await page.getByRole('heading', { name: 'BeefTV Agent' }).count()).toBe(1)
   expect(await page.getByText('当前会话', { exact: true }).count()).toBe(0)
   expect(await page.getByRole('complementary', { name: 'BeefTV Agent' }).evaluate(element => element.getBoundingClientRect().width)).toBe(432)
@@ -107,6 +108,14 @@ test('BeefTV Agent keeps the native conversation and sends the selected collabor
   expect(contexts.every(report => report.connectionId === 'connection-local')).toBe(true)
   expect(await page.evaluate(() => (window as any).nativeOptions)).toEqual({ variant: 'embedded', hero: false, phase: 'active' })
   expect(await page.evaluate(() => (window as any).nativeMounts)).toBe(1)
+  await page.frameLocator('iframe').locator('body').evaluate(element => {
+    element.ownerDocument.defaultView!.addEventListener('message', event => {
+      if (event.data?.type === 'beeftv:workspace-sync') (element.ownerDocument.defaultView as any).lastWorkspaceSync = event.data.activity
+    })
+  })
+  state.setStatus({ ...state.status(), activity: { seq: 1, kind: 'canvas-created', canvasId: 'canvas-new' } } as any)
+  await refresh(page)
+  expect(await page.frameLocator('iframe').locator('body').evaluate(element => (element.ownerDocument.defaultView as any).lastWorkspaceSync)).toEqual({ seq: 1, kind: 'canvas-created', canvasId: 'canvas-new' })
   await page.close()
 })
 
