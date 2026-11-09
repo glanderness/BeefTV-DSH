@@ -37,7 +37,7 @@ html[data-beeftv-host-chrome] .app-workspace-sidebar-brand-row,
 html[data-beeftv-host-chrome] .app-workspace-sidebar-rail-header{margin-top:48px}
 </style>`
   const bridge = `<script>(${embeddedChromeBridge.toString()})()</script>`
-  return html.replace(/<head[^>]*>/i, match => `${match}<base href="${basePath}/"><meta name="referrer" content="no-referrer">${styles}<script>window.__BEEFTV_HARNESS__=${config}</script>${bridge}`)
+  return html.replace(/<base\b[^>]*>/gi, '').replace(/<head[^>]*>/i, match => `${match}<base href="${basePath}/"><meta name="referrer" content="no-referrer">${styles}<script>window.__BEEFTV_HARNESS__=${config}</script>${bridge}`)
 }
 
 // The parent only transmits bounded layout metrics, never workspace data or credentials.
@@ -142,11 +142,18 @@ export async function startRuntime(dataDir, { attachOnly = false } = {}) {
     close() {
       lines.close()
       child.stdin.end()
-      if (record.owned) {
-        const timer = setTimeout(() => child.kill('SIGTERM'), 10_000)
+      if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
+      return new Promise(resolve => {
+        const timer = setTimeout(() => {
+          if (record.owned) child.kill('SIGTERM')
+          resolve()
+        }, record.owned ? 10_000 : 1_000)
         timer.unref()
-        child.once('exit', () => clearTimeout(timer))
-      }
+        child.once('exit', () => {
+          clearTimeout(timer)
+          resolve()
+        })
+      })
     },
   }
 }
