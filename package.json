@@ -1,0 +1,76 @@
+{
+  "name": "dsh-beeftv",
+  "version": "0.1.0",
+  "description": "AI 驱动的视频创作工作台，连接 BeefTV 画布、素材与创作生态。",
+  "type": "module",
+  "main": "host.js",
+  "exports": {
+    ".": "./host.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-api-session-controller"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=22.19.0",
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-mcp-client": "^0.2.2-rc.1"
+  },
+  "files": [
+    "host.js",
+    "client.js",
+    "runtime.js",
+    "cordis.patch.yml",
+    "runtime",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "video",
+    "canvas",
+    "beeftv"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/glanderness/BeefTV-DSH.git"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://github.com/glanderness/BeefTV-DSH#readme",
+  "bugs": {
+    "url": "https://github.com/glanderness/BeefTV-DSH/issues"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "scripts": {
+    "test": "node --test runtime.test.js",
+    "test:browser": "bun test client.browser.test.ts",
+    "package:runtime": "node package-runtime.mjs",
+    "package:release": "node package-release.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  }
+}
