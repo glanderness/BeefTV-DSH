@@ -35,6 +35,12 @@
     "host.js",
     "client.js",
     "runtime.js",
+    "await-machine.js",
+    "await-runner.js",
+    "connection.js",
+    "workspace-http.js",
+    "step-limit.js",
+    "prompts.js",
     "cordis.patch.yml",
     "runtime",
     "README.md",
@@ -63,7 +69,7 @@
     "arm64"
   ],
   "scripts": {
-    "test": "node --test runtime.test.js",
+    "test": "node --test runtime.test.js await-machine.test.js",
     "test:browser": "bun test client.browser.test.ts",
     "package:runtime": "node package-runtime.mjs",
     "package:release": "node package-release.mjs"
