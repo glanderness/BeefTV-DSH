@@ -71,6 +71,10 @@ test('a catalog that marks paid generators covers regenerate with or without the
   assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_node_update_ab092b275e46', {}, [], explicit), false)
   // 目录里有 submitsGeneration 字段但 submit 条目缺失或漏标时，submit 仍按工具名审批。
   assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_generation_submit_ab092b275e46', {}, [], explicit), true)
+  // 未来新增的付费操作不靠名字兜底：目录标了 submitsGeneration 就必须审批。
+  const future = [{ id: 'canvas.generation.extend', readOnly: false, submitsGeneration: true }]
+  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_generation_extend_ab092b275e46', {}, [], future), true)
+  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_generation_extend', {}, [], future), true)
 })
 
 test('only trusted catalog metadata exempts a read-only business call from additional approval', () => {
@@ -511,6 +515,7 @@ test('paid submissions ask with the quote unless the user chose the full-access 
     extraOps: [
       { id: 'canvas.generation.submit', submitsGeneration: true },
       { id: 'canvas.generation.regenerate', submitsGeneration: true },
+      { id: 'canvas.generation.extend', submitsGeneration: true },
     ],
   })
   await call('POST', '/beeftv/connect', { mode: 'standalone' })
@@ -537,6 +542,15 @@ test('paid submissions ask with the quote unless the user chose the full-access 
   assert.deepEqual(await preExecute({ ...regenerate('workspace-session'), arguments: { proposalId: 'gp-unseen', nodeIds: ['node-2'] } }, allow), {
     kind: 'ask', reason: 'BeefTV 将在原节点重新生成并计费，原有结果（如有）会留在素材库。费用按所选渠道实际计费。',
   })
+  // 目录里未来新增的付费操作不靠 submit/regenerate 名字兜底，也必须走审批；
+  // 这条同时覆盖 connection 保存的 generationTools 与 Host 的传递。
+  const extend = session => ({
+    name: 'mcp__beeftv__canvas_generation_extend_ab092b275e46', arguments: {}, agent: { session: { id: session } },
+  })
+  const extendAsked = { kind: 'ask', reason: 'BeefTV 将提交生成或未识别的业务操作，可能修改工作区或产生费用，请核对本次操作。' }
+  assert.deepEqual(await preExecute(extend('workspace-session'), allow), extendAsked)
+  assert.deepEqual(await preExecute(extend('full-access-session'), allow), { kind: 'allow' })
+  assert.deepEqual(await preExecute(extend('unattended-session'), allow), extendAsked)
   // A call DSH already denies stays denied, and reads keep DSH's decision in every mode.
   assert.deepEqual(await preExecute(submit('full-access-session'), async () => ({ kind: 'deny', reason: 'sandbox' })), { kind: 'deny', reason: 'sandbox' })
   const read = { name: 'mcp__beeftv__canvas_get_ab092b275e46', arguments: {}, agent: { session: { id: 'workspace-session' } } }
@@ -831,6 +845,8 @@ test('a regenerate waiting for backend approval neither waits nor wakes', async 
   await sleep(120)
   assert.equal(wakes.length, 0)
   assert.equal(workspace.calls.some(item => item.op === 'task.wait' || item.op === 'task.get'), false)
+  // 只是登记审批意图，画布没有变化：不能触发页面同步或跳转。
+  assert.equal((await call('GET', '/beeftv/status')).body.activity, null)
 })
 
 test('a pending task.wait keeps waiting, and a failed task is reported with its reason', async context => {

@@ -36,6 +36,8 @@ function recordToolActivity(runtime, exec, result) {
     }
   }
   const rawCanvasId = payload?.canvasId || payload?.project?.id || exec.arguments?.canvasId || exec.arguments?.path?.id
+  // 「每次问我」只登记了原地重做意图，画布没有变化；不能因此触发页面刷新或跳转。
+  if (payload?.status === 'pending_approval') return
   const canvasId = typeof rawCanvasId === 'string' && rawCanvasId ? rawCanvasId.slice(0, 200) : null
   const created = /^mcp__beeftv__canvas_create(?:_[a-f0-9]{12})?$/.test(exec.name)
     || (exec.arguments?.tool === 'business_put_canvas_projects_id' && exec.arguments?.body?.project?.revision === 0)
