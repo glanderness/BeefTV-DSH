@@ -12,6 +12,23 @@ const root = fileURLToPath(new URL('.', import.meta.url))
 const mcpOperationName = id => `mcp__beeftv__${id.replace(/[^A-Za-z0-9_-]/g, '_')}`
 const mcpToolBase = name => typeof name === 'string' ? name.replace(/_[a-f0-9]{12}$/, '') : ''
 const mediaReviewTool = mcpOperationName('media.review')
+const submitToolPattern = /^mcp__beeftv__canvas_generation_submit(?:_[a-f0-9]{12})?$/
+const regenerateToolPattern = /^mcp__beeftv__canvas_generation_regenerate(?:_[a-f0-9]{12})?$/
+// submit 与 regenerate 都会创建付费任务；两者提交成功后都要等结果并唤醒。
+const generationSubmissionPattern = /^mcp__beeftv__canvas_generation_(?:submit|regenerate)(?:_[a-f0-9]{12})?$/
+
+// 连接时从操作目录收集「执行即创建付费生成任务」的工具名。
+// 已知的 submit / regenerate 另有按名兜底，目录缺失或漏标时也不会漏审批。
+export function generationToolSet(operations) {
+  const catalog = Array.isArray(operations) ? operations : []
+  const names = new Set()
+  for (const operation of catalog) {
+    if (operation?.submitsGeneration === true && typeof operation?.id === 'string' && operation.id) {
+      names.add(mcpOperationName(operation.id))
+    }
+  }
+  return { names }
+}
 
 // The catalog describes reads that still cost money (replay: unsafe). A catalog entry for the
 // known paid review, or a missing entry, must never silently skip approval.
@@ -38,12 +55,17 @@ export function reviewApprovalReason(args = {}) {
   return `审片会调用审片模型，可能收费。${segment}${model ? `模型：${model}。` : ''}`
 }
 
-export function requiresGenerationApproval(name, args, businessTools = [], operations = []) {
-  if (/^mcp__beeftv__canvas_generation_submit(?:_[a-f0-9]{12})?$/.test(name)) return true
+export function requiresGenerationApproval(name, args, businessTools = [], operations = [], generationTools = generationToolSet(operations)) {
+  const tool = mcpToolBase(name)
+  // 已知付费生成操作按名兜底：目录缺失、切换窗口 current 为空或条目漏标时也不能放行。
+  // 旧后端没有 submitsGeneration 字段时，submit 也照旧按工具名审批。
+  if (submitToolPattern.test(name) || regenerateToolPattern.test(name)) return true
+  // 命中目录里 submitsGeneration 的操作（含带哈希后缀的工具名）一律审批，未来新增的付费操作也覆盖。
+  if (generationTools?.names?.has(tool)) return true
   if (unsafeOperation(name, operations)) return true
   if (!/^mcp__beeftv__business_call(?:_[a-f0-9]{12})?$/.test(name)) return false
-  const tool = businessTools.find(item => item.id === args?.tool)
-  return !(tool?.readOnly === true && tool.submitsGeneration === false)
+  const businessTool = businessTools.find(item => item.id === args?.tool)
+  return !(businessTool?.readOnly === true && businessTool?.submitsGeneration === false)
 }
 
 const proposeToolName = /^mcp__beeftv__canvas_generation_propose(?:_[a-f0-9]{12})?$/
@@ -66,6 +88,45 @@ export function rememberQuote(quotes, name, result) {
   while (quotes.size > 50) quotes.delete(quotes.keys().next().value)
 }
 
+// 报价里只认这次提交的节点：一张生成单可以只重提其中一部分（例如只重试失败节点）。
+function quotedSubmission(args, quotes) {
+  const quote = quotes.get(args?.proposalId)
+  const submitted = Array.isArray(args?.nodeIds) ? args.nodeIds : []
+  const quoted = Array.isArray(quote?.targets) ? quote.targets : []
+  const targets = quoted.filter(target => submitted.includes(target?.nodeId))
+  if (!quote || !submitted.length || targets.length !== new Set(submitted).size) return null
+  return { quote, targets }
+}
+
+function generationDetail(targets) {
+  const kinds = [...new Set(targets.map(target => target.kind))]
+  const [unit, label] = kinds.length === 1 ? generationUnits[kinds[0]] || ['项', '生成'] : ['项', '生成']
+  const amount = targets.reduce((sum, target) => sum + (target.kind === 'image' ? Number(target.parameters?.count) || 1 : 1), 0)
+  const models = [...new Set(targets.map(target => target.model).filter(model => typeof model === 'string' && model))]
+  return `生成 ${amount} ${unit}${label}${models.length ? `（${models.join('、')}）` : ''}`
+}
+
+// 有整单报价时用 BeefTV 的金额文案；只有部分节点有报价时说明其余按渠道计费。
+function generationCost(quote, targets) {
+  const quoted = Array.isArray(quote?.targets) ? quote.targets : []
+  const priced = targets.filter(target => Number.isFinite(target.estimate?.amount))
+  if (targets.length === quoted.length && typeof quote.estimate?.text === 'string' && quote.estimate.text) {
+    return quote.estimate.text.replace(/[。.]+$/, '')
+  }
+  if (priced.length === targets.length) {
+    return `预计费用：¥${Number(priced.reduce((sum, target) => sum + target.estimate.amount, 0).toFixed(4))}`
+  }
+  return priced.length ? '部分费用按所选渠道实际计费' : '费用按所选渠道实际计费'
+}
+
+// 原地重做替换节点上的当前显示，旧结果仍留在素材库；没有报价时不写金额，也不说已经扣费。
+function regenerateApprovalReason(args, quotes) {
+  const matched = quotedSubmission(args, quotes)
+  const detail = matched ? `${generationDetail(matched.targets)}。` : ''
+  const cost = matched ? generationCost(matched.quote, matched.targets) : '费用按所选渠道实际计费'
+  return `BeefTV 将在原节点重新生成并计费，原有结果（如有）会留在素材库。${detail}${cost}。`
+}
+
 // Text for the DSH approval card. It names only the nodes this submission sends: a proposal can be
 // submitted again for a subset, such as retrying failed nodes. Prices are BeefTV's per-node quotes.
 export function approvalReason(name, args, businessTools = [], quotes = new Map(), operations = []) {
@@ -75,30 +136,18 @@ export function approvalReason(name, args, businessTools = [], quotes = new Map(
       ? reviewApprovalReason(args)
       : `BeefTV 将执行只读操作 ${unsafe.id}，可能调用外部模型并产生费用。请核对本次操作。`
   }
-  if (!/^mcp__beeftv__canvas_generation_submit(?:_[a-f0-9]{12})?$/.test(name)) {
+  if (regenerateToolPattern.test(name)) return regenerateApprovalReason(args, quotes)
+  if (!submitToolPattern.test(name)) {
     const business = businessTools.find(tool => tool.id === args?.tool)
     return business
       ? `BeefTV 请求执行 ${business.method} ${business.path}${business.submitsGeneration ? '，将提交可能计费的生成任务' : '，将修改工作区'}。请核对本次操作。`
       : 'BeefTV 将提交生成或未识别的业务操作，可能修改工作区或产生费用，请核对本次操作。'
   }
-  const quote = quotes.get(args?.proposalId)
-  const submitted = Array.isArray(args?.nodeIds) ? args.nodeIds : []
-  const quoted = Array.isArray(quote?.targets) ? quote.targets : []
-  const targets = quoted.filter(target => submitted.includes(target?.nodeId))
-  if (!quote || !submitted.length || targets.length !== new Set(submitted).size) {
+  const matched = quotedSubmission(args, quotes)
+  if (!matched) {
     return 'BeefTV 将提交付费生成，但这次提交和已有报价对不上，无法显示费用。可以先拒绝，让 Agent 重新报价后再提交。'
   }
-  const kinds = [...new Set(targets.map(target => target.kind))]
-  const [unit, label] = kinds.length === 1 ? generationUnits[kinds[0]] || ['项', '生成'] : ['项', '生成']
-  const amount = targets.reduce((sum, target) => sum + (target.kind === 'image' ? Number(target.parameters?.count) || 1 : 1), 0)
-  const models = [...new Set(targets.map(target => target.model).filter(model => typeof model === 'string' && model))]
-  const priced = targets.filter(target => Number.isFinite(target.estimate?.amount))
-  const cost = targets.length === quoted.length && typeof quote.estimate?.text === 'string' && quote.estimate.text
-    ? quote.estimate.text.replace(/[。.]+$/, '')
-    : priced.length === targets.length
-      ? `预计费用：¥${Number(priced.reduce((sum, target) => sum + target.estimate.amount, 0).toFixed(4))}`
-      : priced.length ? '部分费用按所选渠道实际计费' : '费用按所选渠道实际计费'
-  return `BeefTV 将生成 ${amount} ${unit}${label}${models.length ? `（${models.join('、')}）` : ''}。${cost}。`
+  return `BeefTV 将${generationDetail(matched.targets)}。${generationCost(matched.quote, matched.targets)}。`
 }
 
 // ---- 生成完接着做：设置、任务判定与唤醒文案 ----
@@ -134,8 +183,6 @@ export function validatedSettingsPatch(value) {
   return patch
 }
 
-const submitToolPattern = /^mcp__beeftv__canvas_generation_submit(?:_[a-f0-9]{12})?$/
-
 function resultPayload(result) {
   const text = Array.isArray(result?.content) ? result.content.find(item => item?.type === 'text' && typeof item.text === 'string')?.text : undefined
   if (!text) return null
@@ -148,9 +195,12 @@ function resultPayload(result) {
 }
 
 // 成功提交的返回里可能有 taskIds（整批）或 taskId（单个）。重复提交复用同一任务时也只认一次。
+// 原地重做和普通提交一样会创建任务；「每次问我」返回 pending_approval 时还没生成、没扣费，
+// 不能当成提交成功去等结果或唤醒。
 export function submittedTaskIds(name, result) {
-  if (!submitToolPattern.test(name) || result?.isError) return []
+  if (!generationSubmissionPattern.test(name) || result?.isError) return []
   const payload = resultPayload(result)
+  if (payload?.status === 'pending_approval') return []
   const values = Array.isArray(payload?.taskIds) ? payload.taskIds : payload?.taskId ? [payload.taskId] : []
   return [...new Set(values.filter(id => typeof id === 'string' && id))]
 }

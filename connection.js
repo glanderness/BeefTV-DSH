@@ -6,7 +6,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import * as mcpClient from '@deepseek-ai/dsh-mcp-client'
 import {
-  attachLocalRuntime, awayGenerationNotice, callOperation, defaultPluginSettings, hasOperation, inspectWorkspace, localAppStatus,
+  attachLocalRuntime, awayGenerationNotice, callOperation, defaultPluginSettings, generationToolSet, hasOperation, inspectWorkspace, localAppStatus,
   normalizeSettings, startLocalRuntime, startRuntime, validatedSettingsPatch, workspaceJSON,
 } from './runtime.js'
 
@@ -208,6 +208,8 @@ export function createConnection({ ctx, pluginHome, runner, stepLimit, awaitingR
       runtime.businessTools = business.tools
       runtime.operations = operations.ops
       runtime.readOnlyTools = readOnlyToolNames(operations.ops)
+      // 付费生成工具在连接时按目录确定；目录没写 submitsGeneration 时由判断函数回退认 submit。
+      runtime.generationTools = generationToolSet(operations.ops)
       await loadGuide(runtime)
       runtime.mode = mode
       runtime.localApp = mode === 'standalone' ? await localAppStatus() : null
