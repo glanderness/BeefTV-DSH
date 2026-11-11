@@ -11,7 +11,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import * as runtime from './runtime.js'
 import { createAwaitRunner } from './await-runner.js'
-import { approvalReason, awaitWakeText, defaultPluginSettings, embeddedDocument, guidedPrompt, normalizeSettings, publicContext, rememberQuote, requiresGenerationApproval, runtimeRecord, stepLimitNotice, submittedTaskIds, taskOutcome, validatedSettingsPatch, waitOutcome } from './runtime.js'
+import { approvalReason, awaitWakeText, defaultPluginSettings, embeddedDocument, guidedPrompt, normalizeSettings, publicContext, rememberQuote, requiresGenerationApproval, runtimeRecord, stepLimitNotice, submittedTaskIds, taskOutcome, unknownCatalogReason, validatedSettingsPatch, waitOutcome } from './runtime.js'
 // DSH supplies its MCP client package when it loads the plugin. The Host only hands it to
 // ctx.plugin, which the tests provide, so an inert module stands in for it.
 register(`data:text/javascript,${encodeURIComponent(`export async function resolve(specifier, context, next) {
@@ -43,11 +43,31 @@ test('canvas context accepts only bounded public view metadata', () => {
 })
 
 test('generation submission and the business gateway require DSH approval', () => {
+  const catalog = [
+    { id: 'canvas.generation.propose', readOnly: true, replay: 'safe' },
+    { id: 'canvas.search', readOnly: true, replay: 'safe' },
+  ]
   assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_generation_submit_ab092b275e46'), true)
   assert.equal(requiresGenerationApproval('mcp__beeftv__business_call_ab092b275e46'), true)
-  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_generation_propose_ab092b275e46'), false)
-  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_search_ab092b275e46'), false)
+  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_generation_propose_ab092b275e46', {}, [], catalog), false)
+  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_search_ab092b275e46', {}, [], catalog), false)
   assert.equal(requiresGenerationApproval('mcp__other__canvas_generation_submit_ab092b275e46'), false)
+})
+
+test('a missing operation catalog fails closed for every tool but the known free reads', () => {
+  // 切换或释放窗口里 current 为空、目录读不到：未来新增的付费操作和普通读取都不能直接放行。
+  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_generation_extend_ab092b275e46', {}), true)
+  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_generation_extend', {}), true)
+  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_get_ab092b275e46', {}), true)
+  assert.equal(requiresGenerationApproval('mcp__beeftv__business_call_ab092b275e46', { tool: 'business_get_assets' }), true)
+  // 已知不产生费用的工具照旧放行。
+  assert.equal(requiresGenerationApproval('mcp__beeftv__business_list_ab092b275e46', {}), false)
+  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_generation_propose_ab092b275e46', {}), false)
+  // 目录存在但为空，说明目录已经加载，按目录判断而不是按不可用处理。
+  assert.equal(requiresGenerationApproval('mcp__beeftv__canvas_get_ab092b275e46', {}, [], []), false)
+  // 审批卡不能把目录不可用说成可能免费。
+  assert.equal(approvalReason('mcp__beeftv__canvas_generation_extend_ab092b275e46', {}), unknownCatalogReason)
+  assert.equal(approvalReason('mcp__beeftv__business_call_ab092b275e46', { tool: 'business_get_assets' }), unknownCatalogReason)
 })
 
 test('a catalog that marks paid generators covers regenerate with or without the hash suffix', () => {
@@ -85,11 +105,12 @@ test('only trusted catalog metadata exempts a read-only business call from addit
     { id: 'business_put_canvas_projects_id', readOnly: false, submitsGeneration: false },
     { id: 'business_get_generation', readOnly: true, submitsGeneration: true },
   ]
-  assert.equal(requiresGenerationApproval(name, { tool: 'business_get_assets' }, catalog), false)
-  assert.equal(requiresGenerationApproval(name, { tool: 'business_post_tasks', readOnly: true, submitsGeneration: false }, catalog), true)
-  assert.equal(requiresGenerationApproval(name, { tool: 'business_put_canvas_projects_id', readOnly: true }, catalog), true)
-  assert.equal(requiresGenerationApproval(name, { tool: 'business_get_generation' }, catalog), true)
-  assert.equal(requiresGenerationApproval(name, { tool: 'business_get_unknown', readOnly: true }, catalog), true)
+  // 业务目录已加载（操作目录为空），只按业务目录的只读标记判断。
+  assert.equal(requiresGenerationApproval(name, { tool: 'business_get_assets' }, catalog, []), false)
+  assert.equal(requiresGenerationApproval(name, { tool: 'business_post_tasks', readOnly: true, submitsGeneration: false }, catalog, []), true)
+  assert.equal(requiresGenerationApproval(name, { tool: 'business_put_canvas_projects_id', readOnly: true }, catalog, []), true)
+  assert.equal(requiresGenerationApproval(name, { tool: 'business_get_generation' }, catalog, []), true)
+  assert.equal(requiresGenerationApproval(name, { tool: 'business_get_unknown', readOnly: true }, catalog, []), true)
   assert.equal(requiresGenerationApproval(name, { tool: 'business_get_assets', readOnly: true }), true)
 })
 
@@ -555,6 +576,31 @@ test('paid submissions ask with the quote unless the user chose the full-access 
   assert.deepEqual(await preExecute(submit('full-access-session'), async () => ({ kind: 'deny', reason: 'sandbox' })), { kind: 'deny', reason: 'sandbox' })
   const read = { name: 'mcp__beeftv__canvas_get_ab092b275e46', arguments: {}, agent: { session: { id: 'workspace-session' } } }
   assert.deepEqual(await preExecute(read, allow), { kind: 'allow' })
+})
+
+test('a call during the switching window asks even when the operation catalog is gone', async context => {
+  const presets = new Map([['workspace-session', 'workspace-write'], ['full-access-session', 'danger-full-access']])
+  const permissionPresets = { current: session => presets.get(session.id) }
+  const { call, listeners, workspace } = await startHost(context, {
+    services: { permissionPresets },
+    extraOps: [{ id: 'canvas.generation.extend', submitsGeneration: true }],
+  })
+  await call('POST', '/beeftv/connect', { mode: 'standalone' })
+  const preExecute = listeners.get('tools/pre-execute')
+  const allow = async () => ({ kind: 'allow' })
+  const toolCall = (name, session) => ({ name, arguments: {}, agent: { session: { id: session } } })
+  const extend = session => toolCall('mcp__beeftv__canvas_generation_extend_ab092b275e46', session)
+  // 连接在线时按目录判断：未来付费操作要审批，普通读取不拦。
+  assert.equal((await preExecute(extend('workspace-session'), allow)).kind, 'ask')
+  assert.deepEqual(await preExecute(toolCall('mcp__beeftv__canvas_get_ab092b275e46', 'workspace-session'), allow), { kind: 'allow' })
+  // 健康检查失败后 current 被清空，目录读不到；此时未知操作不能当成免审批。
+  workspace.available = false
+  assert.equal((await call('GET', '/beeftv/status')).body.connected, false)
+  assert.deepEqual(await preExecute(extend('workspace-session'), allow), { kind: 'ask', reason: unknownCatalogReason })
+  assert.deepEqual(await preExecute(toolCall('mcp__beeftv__canvas_get_ab092b275e46', 'workspace-session'), allow), { kind: 'ask', reason: unknownCatalogReason })
+  // 已知不产生费用的工具照旧放行；完全权限照旧直接执行。
+  assert.deepEqual(await preExecute(toolCall('mcp__beeftv__business_list_ab092b275e46', 'workspace-session'), allow), { kind: 'allow' })
+  assert.deepEqual(await preExecute(extend('full-access-session'), allow), { kind: 'allow' })
 })
 
 test('without the DSH permission presets, paid submissions still ask', async context => {

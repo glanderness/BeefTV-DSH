@@ -19,16 +19,23 @@ const generationSubmissionPattern = /^mcp__beeftv__canvas_generation_(?:submit|r
 
 // 连接时从操作目录收集「执行即创建付费生成任务」的工具名。
 // 已知的 submit / regenerate 另有按名兜底，目录缺失或漏标时也不会漏审批。
+// 目录读不到时返回 null：调用方据此区分「目录为空」和「根本没有目录」。
 export function generationToolSet(operations) {
-  const catalog = Array.isArray(operations) ? operations : []
+  if (!Array.isArray(operations)) return null
   const names = new Set()
-  for (const operation of catalog) {
+  for (const operation of operations) {
     if (operation?.submitsGeneration === true && typeof operation?.id === 'string' && operation.id) {
       names.add(mcpOperationName(operation.id))
     }
   }
   return { names }
 }
+
+// 拿不到操作目录时仍能确定不产生费用、不修改画布的工具：CLI 自己的发现工具和只返回报价的 propose。
+const freeWithoutCatalogTool = /^mcp__beeftv__(?:business_list|canvas_generation_propose)(?:_[a-f0-9]{12})?$/
+
+// 目录不可用时无法判断一个工具是否收费，审批卡只能如实说明，不能承诺免费。
+export const unknownCatalogReason = '暂时无法确认这次操作是否产生费用或修改画布，请核对后再允许。'
 
 // The catalog describes reads that still cost money (replay: unsafe). A catalog entry for the
 // known paid review, or a missing entry, must never silently skip approval.
@@ -55,14 +62,18 @@ export function reviewApprovalReason(args = {}) {
   return `审片会调用审片模型，可能收费。${segment}${model ? `模型：${model}。` : ''}`
 }
 
-export function requiresGenerationApproval(name, args, businessTools = [], operations = [], generationTools = generationToolSet(operations)) {
+export function requiresGenerationApproval(name, args, businessTools = [], operations, generationTools = generationToolSet(operations)) {
   const tool = mcpToolBase(name)
+  if (!tool.startsWith('mcp__beeftv__')) return false
   // 已知付费生成操作按名兜底：目录缺失、切换窗口 current 为空或条目漏标时也不能放行。
   // 旧后端没有 submitsGeneration 字段时，submit 也照旧按工具名审批。
   if (submitToolPattern.test(name) || regenerateToolPattern.test(name)) return true
+  if (unsafeOperation(name, operations)) return true
+  // 拿不到操作目录（切换或释放窗口）时，未知工具不能当免审批：除了确定不收费的读取，一律先请求审批。
+  // 完全权限由 Host 在审批判断之后放行，这里不做例外。
+  if (generationTools === null) return !freeWithoutCatalogTool.test(tool)
   // 命中目录里 submitsGeneration 的操作（含带哈希后缀的工具名）一律审批，未来新增的付费操作也覆盖。
   if (generationTools?.names?.has(tool)) return true
-  if (unsafeOperation(name, operations)) return true
   if (!/^mcp__beeftv__business_call(?:_[a-f0-9]{12})?$/.test(name)) return false
   const businessTool = businessTools.find(item => item.id === args?.tool)
   return !(businessTool?.readOnly === true && businessTool?.submitsGeneration === false)
@@ -129,7 +140,7 @@ function regenerateApprovalReason(args, quotes) {
 
 // Text for the DSH approval card. It names only the nodes this submission sends: a proposal can be
 // submitted again for a subset, such as retrying failed nodes. Prices are BeefTV's per-node quotes.
-export function approvalReason(name, args, businessTools = [], quotes = new Map(), operations = []) {
+export function approvalReason(name, args, businessTools = [], quotes = new Map(), operations) {
   const unsafe = unsafeOperation(name, operations)
   if (unsafe) {
     return unsafe.id === 'media.review'
@@ -138,6 +149,8 @@ export function approvalReason(name, args, businessTools = [], quotes = new Map(
   }
   if (regenerateToolPattern.test(name)) return regenerateApprovalReason(args, quotes)
   if (!submitToolPattern.test(name)) {
+    // 目录不可用时没有依据判断费用和影响，不能沿用「未识别」文案暗示可能免费。
+    if (generationToolSet(operations) === null) return unknownCatalogReason
     const business = businessTools.find(tool => tool.id === args?.tool)
     return business
       ? `BeefTV 请求执行 ${business.method} ${business.path}${business.submitsGeneration ? '，将提交可能计费的生成任务' : '，将修改工作区'}。请核对本次操作。`
