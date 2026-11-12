@@ -1,74 +1,32 @@
-# BeefTV-DSH
+# BeefTV for DeepSeek Harness
 
-DeepSeek Harness 中的 AI 视频创作工作台。左侧使用 BeefTV 的画布、项目、素材、技能和模型设置，右侧常驻 **BeefTV Agent**，支持创作、素材整理和生态自定义。
+面向 AI 视频创作的 DSH 原生工作台，左侧复用 BeefTV 画布、项目、素材、技能、插件与模型设置，右侧常驻 DSH 原生 Agent。
 
-## 下载与安装
+## 初代运行方式
 
-首版支持 **macOS Apple Silicon（M1 / M2 / M3 / M4 等 arm64）**，需要已安装 **DeepSeek Harness 0.2.2 系列**。插件版本 `0.1.0`，内置 BeefTV 运行时 `2.1.6`。
+- 独立工作区保存在 DSH home 的 `storages/beeftv/workspace`，只使用插件内置的运行包，可在工作台内连接 BeefTV 账号或配置自带 Key。独立工作区会标明「独立工作区，和本机 BeefTV 不是同一份数据」。
+- 连接本地 BeefTV 需要 `/Applications/BeefTV.app` 为 2.2.0 或更高版本。插件先读取应用版本，版本较低时只提示升级，不启动应用；通过检查后打开应用，等待其本机私有 IPC 就绪后接入，直接使用原账号连接、工程与素材。已经选了独立工作区时，本机 BeefTV 可用后会提示一次是否切换，点「暂不」后这台机器不再提示。
+- 生成复用 BeefTV 的提议与审批机制；审片会调用审片模型，可能收费，提交前同样会询问。模型推理使用 DSH 当前模型配置。
+- 画布选中节点后点「问助手」，选中的内容会填到右侧输入框，不会自动发送。
+- 提交生成后会自动等结果，完成时在对话里接着做，不用再问一句。工作台菜单里可以关闭「生成完自动继续」，也可以调整每轮步数上限（默认 40 步）。点停止后，这一轮不会再自动继续。
+- 关闭 DeepSeek Harness 或断开连接期间完成的生成不会自动续跑；重新打开 BeefTV 面板时会提示一次「有 N 个生成在你离开时完成。」
+- 首版支持 macOS Apple Silicon，DSH 0.2.2-rc.1。原生运行包来自当前源码构建并安装的 `/Applications/BeefTV.app`。
 
-1. 从 [Releases](https://github.com/glanderness/BeefTV-DSH/releases/latest) 下载 `beeftv-dsh-0.1.0-darwin-arm64.tgz`。
-2. 打开终端，执行以下命令。若文件下载到了其他位置，请替换最后的路径。
+## 构建与安装
 
-```sh
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "$HOME/Downloads/beeftv-dsh-0.1.0-darwin-arm64.tgz"
-```
-
-3. 完全退出并重新打开 DeepSeek Harness，在侧栏打开 **BeefTV**。
-4. 首次打开时选择一种工作区。
-
-| 方式 | 使用场景 |
-| --- | --- |
-| 使用独立工作区 | 首次使用，无需另外安装 BeefTV 桌面端。使用随包运行时创建独立本地工作区。 |
-| 连接本机 BeefTV | 使用已安装的 `/Applications/BeefTV.app`，直接访问同一套项目、素材和账户配置。需要 BeefTV 2.2.0 或更高版本；版本较低时不会连接，工作台会提示升级。 |
-
-独立工作区位于 Harness profile 对应 DSH home 的 `storages/beeftv/workspace`。安装插件后，模型渠道和账户需要由你自行配置或授权。AI 模型及视频生成费用由配置的渠道收取。
-
-连接本机 BeefTV 后，左侧的画布与素材和桌面端是同一份。使用独立工作区时，工作台会标明「独立工作区，和本机 BeefTV 不是同一份数据」；本机 BeefTV 可用后会提示一次是否切换，点「暂不」后这台机器不再提示。
-
-右侧 Agent 可以拖动调整宽度，最小宽度 320px。收起 Harness 侧栏时仅顶部控件避让，下方画布继续铺满。生成提交和会调用付费模型的审片都通过 Harness 审批，审片卡会写明片段时间；选择完全权限时不弹出审批，直接执行。在画布选中节点后点「问助手」，选中的内容会填到右侧输入框，不会自动发送。
-
-## 更新与卸载
-
-更新时下载新版本的 `.tgz`，使用同一条安装命令替换文件路径，并重新启动 Harness。
+先按仓库既有流程更新 `/Applications/BeefTV.app`，再从仓库根目录依次执行。
 
 ```sh
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop remove dsh-beeftv
+node plugins/deepseek-harness/package-runtime.mjs
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "file:$(pwd)/plugins/deepseek-harness"
 ```
 
-安装包包含运行程序与资源。项目、账户和模型配置写入用户本机工作区。卸载命令移除插件，历史工作区由 Harness profile 保留。
+打包会把安装版的可执行文件、CLI 和运行资源放进插件，独立运行时无需打开 BeefTV 桌面窗口。每次重新打包或修改插件后，都要重新执行上述 CLI 安装命令，再重新启动 DeepSeek Harness 加载更新。`file:` 安装可能通过硬链接复制单个文件，重建运行包目录会使已安装副本继续保留旧文件，必须重新安装刷新。插件包名为 `dsh-beeftv`，侧栏入口为 BeefTV。
 
-## 常见问题
+## 权限与数据
 
-- **看不到 BeefTV 入口** — 完全退出 Harness 后重新打开，确认安装命令使用 `--profile desktop`。
-- **无法连接本机 BeefTV** — 确认桌面端为 2.2.0 或更高版本，打开桌面端并等待启动完成，再重试连接。独立工作区始终使用内置运行时，不受桌面端版本影响。
-- **macOS 阻止运行** — 首版运行时采用本地签名，尚未经过 Apple 公证。请在系统“隐私与安全性”中核对来源并按提示处理。
-- **项目暂时无法读取** — 先点“重试加载”。本版本包含批量项目状态更新修复。若仍出现，请在设置中导出问题记录并提交 Issue，注意移除私人信息。
+Host 通过本机私有 IPC 获取运行时能力，账号与模型密钥留在 BeefTV 原有存储中。浏览器只得到当前连接生命周期内的临时画布访问地址。切换连接会撤销旧 MCP 客户端，后端只会关闭由插件启动的实例。
 
-## 开发与重新打包
+Agent 通过现有 BeefTV MCP 访问工作区。生成提交、业务目录中标记为写入、生成或无法识别的网关调用，以及会调用付费模型的只读操作（如审片），由 DSH 请求批准；选择完全权限时不弹出审批，直接执行。其余明确标记为只读且不提交生成的调用可直接读取。批准后使用 BeefTV 的 `caller` 模式核对版本与提交任务。画布视图上下文仅包含路由、画布标识与已选节点。已有工作区采用原位连接，独立工作区单独保存。
 
-```sh
-bun install
-bun run test
-bunx playwright install chromium
-bun run test:browser
-```
-
-本仓库保存插件源码，二进制运行时随 GitHub Release 分发。重新打包需要安装已构建好的 BeefTV 桌面版。
-
-```sh
-# 默认从 /Applications/BeefTV.app 复制程序与资源
-bun run package:release
-# 可通过 BEEFTV_APP_PATH 指定其他已构建安装位置
-```
-
-`release/` 中会生成可直接安装的 `.tgz`、构建说明及 SHA-256 校验文件。检查安装包的校验值。
-
-```sh
-shasum -a 256 beeftv-dsh-0.1.0-darwin-arm64.tgz
-```
-
-## 源码与许可
-
-BeefTV 上游源码位于 [glanderness/BeefTV](https://github.com/glanderness/BeefTV)。本次运行时对应的完整源码快照和 FFmpeg/ffprobe 源码随同版本 Release 提供。构建版本、源代码基线和运行时校验值见发布说明中的构建清单。
-
-本项目沿用 BeefTV 的分区许可，详见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。历史 MIT 部分及第三方组件保留各自许可。公开仓库的可见性不改变这些许可条件。
+运行包遵循随包的 BeefTV LICENSE 与 NOTICE，第三方资源保留各自许可。
