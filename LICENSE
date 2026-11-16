@@ -18,14 +18,17 @@ license under this Part A. A "Licensor" is a copyright holder or authorized
 representative granting rights in Covered Material.
 
 Material previously made available under MIT remains available under MIT.
-This includes the existing material in commits
+This repository (glanderness/BeefTV-DSH) was first published under Part A; when
+distributed with a bundled BeefTV runtime from glanderness/BeefTV, historical
+material in glanderness/BeefTV commits
 a96baf082f478901ed558c91a80bc29dfade523c and
-2327ee2d80282b10dd8bef0f26b48990d46f5c3b, as well as any other material
-previously published under MIT. The original MIT text and copyright notices
-are retained in Part B. Part A does not revoke, replace, or restrict those
-existing permissions, even when that material is included in a later release.
-In a file containing both historical material and new original additions,
-Part A applies only to eligible new additions, not the historical material.
+2327ee2d80282b10dd8bef0f26b48990d46f5c3b, as well as upstream and other
+material previously published under MIT, remains available under MIT. Those MIT
+texts and copyright notices are set out in Part B. Part A does not revoke,
+replace, or restrict those existing permissions, even when that material is
+included in a later release. In a file containing both historical material and
+new original additions, Part A applies only to eligible new additions, not the
+historical material.
 
 Third-party code, dependencies, models, fonts, assets, and other independently
 licensed material are excluded from Covered Material and retain their own
@@ -34,7 +37,7 @@ incompatible license is also excluded. This exclusion does not by itself
 establish that a combined distribution is compatible: distributors must
 satisfy all applicable licenses and must not make incompatible combinations
 without obtaining the necessary compatible permissions. See NOTICE and
-THIRD_PARTY_NOTICES.md.
+https://github.com/glanderness/BeefTV/blob/main/THIRD_PARTY_NOTICES.md.
 
 2. Definitions
 
@@ -129,7 +132,8 @@ require a logo or watermark on your creative outputs.
 Unless explicitly agreed otherwise before acceptance, an original
 contribution intentionally submitted for inclusion under Part A is provided
 under Part A. For that contribution, the contributor also grants the
-maintainers of the official glanderness/BeefTV repository a worldwide,
+maintainers of the official glanderness/BeefTV-DSH and glanderness/BeefTV
+repositories a worldwide,
 non-exclusive, perpetual, irrevocable, royalty-free copyright license to
 reproduce, modify, distribute, and
 sublicense it under Part A or separate commercial terms. The contributor
@@ -174,9 +178,14 @@ licensed only under Part A.
 
 MIT License
 
-Copyright (c) 2026 @beefnoode and BeefTV contributors
+Upstream copyright notices (bundled BeefTV runtime):
 Copyright (c) 2026 basketikun
-Copyright (c) 2026 ddcat
+Copyright (c) 2026 ddcat and Open AI Canvas contributors
+
+Historical BeefTV MIT material (for material previously published under MIT in
+glanderness/BeefTV, including commits a96baf082f478901ed558c91a80bc29dfade523c
+and 2327ee2d80282b10dd8bef0f26b48990d46f5c3b):
+Copyright (c) 2026 @beefnoode and BeefTV contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -187,6 +196,52 @@ furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Open Storyboard Canvas notice (reproduced verbatim from
+https://github.com/ganbo-gab/open-storyboard-canvas/blob/b7b05ff920b830b0e97744757ef0e41e956bb4e3/LICENSE
+for camera-prompt-library in the bundled BeefTV runtime, ported via
+ddcat-ai/open-ai-canvas):
+
+MIT License
+
+Open Storyboard Canvas additions:
+Copyright (c) 2026 ganbo-gab and contributors
+
+Original project attribution:
+Storyboard-Copilot by henjicc / 痕继痕迹
+https://github.com/henjicc/Storyboard-Copilot
+
+This project is based on the original Storyboard-Copilot project. The original
+author has granted written chat authorization to continue development and open
+source publication on the condition that the original author name and original
+project link are retained. See NOTICE and
+docs/legal/upstream-author-authorization-2026-05-31.jpg for the attribution
+record.
+
+The MIT terms below apply to the new original code and resources in this
+repository to the extent ganbo-gab and contributors own the rights to license
+those contributions.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice, this permission notice, and the original project
+attribution above shall be included in all copies or substantial portions of
+the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
