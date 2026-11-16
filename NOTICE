@@ -1,71 +1,108 @@
-BeefTV
+BeefTV for DeepSeek Harness (BeefTV-DSH)
 Copyright (C) 2026 BeefTV contributors
 
-BeefTV uses scoped licensing. New original material first introduced under
-the BeefTV Source Available License 1.0 is governed by Part A of LICENSE
-only to the extent its copyright holders can license it under those terms.
-Previously MIT-licensed material remains under MIT, whose complete original
-text and copyright notices are preserved in Part B of LICENSE.
+BeefTV-DSH uses scoped licensing. Original DeepSeek Harness integration code in
+this repository (glanderness/BeefTV-DSH) was first published under the BeefTV
+Source Available License 1.0 and is governed by Part A of LICENSE only to the
+extent its copyright holders can license it under those terms.
 
-The transition begins with the commit introducing Part A. All previously
-MIT-licensed material is excluded from the new restrictions, including the
-existing material in commits a96baf082f478901ed558c91a80bc29dfade523c and
-2327ee2d80282b10dd8bef0f26b48990d46f5c3b. These examples do not limit the
-preservation of other historical MIT grants. In mixed files, new eligible
-original additions and historical portions retain their respective terms.
-There is no retroactive restriction on existing MIT permissions.
+When packaged with a standalone BeefTV runtime from glanderness/BeefTV,
+previously MIT-licensed material in that bundled runtime—including upstream MIT
+components and historical BeefTV MIT material in glanderness/BeefTV commits
+a96baf082f478901ed558c91a80bc29dfade523c and
+2327ee2d80282b10dd8bef0f26b48990d46f5c3b—remains under MIT, whose license texts
+and copyright notices are set out in Part B of LICENSE. These examples do not
+limit the preservation of other historical MIT grants. In mixed files, new
+eligible original additions and historical portions retain their respective
+terms. There is no retroactive restriction on existing MIT permissions.
 
 Project scope
 -------------
 
-BeefTV is a local-first, single-user desktop workspace for AI-assisted video
-creation. The desktop application uses a React user interface embedded by
-Wails and a Go backend that listens on loopback. Projects, canvas state,
-generated assets, model-channel settings, and durable task state are stored in
-the user's local workspace. Requests leave the device only when a user invokes
-an externally configured model provider or another explicitly networked tool.
+This repository implements the DeepSeek Harness companion plugin (`dsh-beeftv`):
+host/client workspace bridging, local BeefTV IPC handshake, MCP tool approval,
+and generation completion wake-up state machines. When packaged for standalone
+use via `package-runtime.mjs`, `runtime/` embeds executables and assets built
+from `glanderness/BeefTV`, which retain their own notices.
 
-Upstream source
----------------
+Upstream source (bundled BeefTV runtime)
+----------------------------------------
 
-This repository contains code derived from:
+The bundled BeefTV runtime contains code derived from the following upstream
+projects:
 
   Infinite Canvas
   https://github.com/basketikun/infinite-canvas
   Base version: v0.5.0
   Base commit: 568f0f1838df8de31fe885a4e130e2f346dd14ab
 
-The upstream project is maintained under the basketikun account. Upstream
-authors and contributors retain copyright in their respective contributions.
-The upstream project was relicensed to MIT in commit
+Infinite Canvas, maintained by basketikun, provides the upstream infinite
+canvas architecture and portions of the canvas implementation used by BeefTV,
+including node dragging and zooming, connections, undo/redo, and canvas
+import/export. The project was relicensed to MIT in commit
 890ba95858bbb13496d23978003716656109abb2. Its copyright and permission notice
-are preserved in Part B of LICENSE. The new source-available restrictions do
-not replace the upstream license or the upstream authors' rights.
+are preserved in Part B of LICENSE.
 
-BeefTV changes
---------------
+  影策 Open AI Canvas (ddcat-ai/open-ai-canvas)
+  https://github.com/ddcat-ai/open-ai-canvas
+  Base version: v1.3.0 (2026-09-15)
+  Base commit: b7484c56789a7cf1ea7c062084d56af5c3dd18cd
 
-BeefTV adds and maintains the local Go application layer, SQLite and local
-asset persistence, durable generation tasks, provider and protocol adapters,
-the Wails desktop shell, media workflows, timeline tools, the local Agent, and
-substantial canvas and workspace UI changes.
+BeefTV is developed on top of ddcat's Open AI Canvas, an AI filmmaking and
+short drama workspace. Foundational capabilities derived from this project
+include canvas node workflows, model provider integration, task and asset
+management, and community-contributed built-in plugins, which BeefTV adapts and
+extends for its local desktop application. The referenced release uses the MIT
+License; its upstream copyright notices for basketikun and for ddcat and Open AI
+Canvas contributors are set out in Part B of LICENSE.
+
+  Open Storyboard Canvas (ganbo-gab/open-storyboard-canvas)
+  https://github.com/ganbo-gab/open-storyboard-canvas
+  Upstream commit: b7b05ff920b830b0e97744757ef0e41e956bb4e3
+  Original project attribution: Storyboard-Copilot by henjicc / 痕继痕迹
+  https://github.com/henjicc/Storyboard-Copilot
+
+The camera and lens prompt library in BeefTV's canvas (inherited via
+ddcat-ai/open-ai-canvas) is ported from Open Storyboard Canvas under MIT terms
+with an additional original-project attribution condition; its verbatim
+copyright notice, Storyboard-Copilot attribution, and permission clause are
+preserved in Part B of LICENSE.
+
+We thank these projects' authors, maintainers, and contributors. They retain
+copyright in their respective contributions. BeefTV's source-available
+restrictions do not replace the upstream licenses or the upstream authors'
+rights.
+
+BeefTV-DSH and bundled runtime changes
+--------------------------------------
+
+- BeefTV-DSH plugin (this repository): adds and maintains the DeepSeek Harness
+  host/client integration, local workspace IPC discovery, MCP permission gates,
+  and durable task wait/wake orchestration.
+- Bundled BeefTV runtime (`glanderness/BeefTV`): adapts and extends the
+  upstream workspace into a local single-user desktop runtime, including the
+  Wails desktop shell, local SQLite and asset workspace isolation, the durable
+  Pi-based Agent runtime, and expanded media, provider, and UI capabilities.
 
 Third-party software and assets
 -------------------------------
 
-Dependencies and bundled assets remain subject to the licenses and notices of
-their respective authors. Important runtime components include Wails,
-FFmpeg.wasm, Excalidraw, MediaPipe, React, Gin, GORM, and SQLite bindings.
-Provider and product names are used only to identify compatible protocols or
-services and do not imply affiliation or endorsement.
+This plugin's peer integration targets `@deepseek-ai/dsh-mcp-client`, which
+retains its own terms. Dependencies and bundled assets inside a packaged BeefTV
+runtime (including Wails, FFmpeg/FFmpeg.wasm, Excalidraw, MediaPipe, React,
+Gin, GORM, and SQLite bindings) remain subject to the licenses and notices of
+their respective authors. Provider and product names identify compatible
+protocols or services only and do not imply affiliation or endorsement.
 
-GPL-governed material and material whose distribution must use an
-incompatible license are outside Part A. An exclusion alone does not resolve
-the licensing of a combined work; distributors must comply with all
-applicable terms and must not distribute incompatible combinations without
-the necessary compatible permissions.
+GPL-governed material and material whose distribution must use an incompatible
+license are outside Part A. Distributors must comply with all applicable terms
+and must not distribute incompatible combinations without the necessary
+compatible permissions.
 
-See THIRD_PARTY_NOTICES.md for dependency and bundled-asset notices. This
-inventory and its name-coverage audit are not a complete compatibility or
-corresponding-source audit. See docs/content/docs/overview/licensing.mdx for
-the practical scope of the source-available policy.
+For the direct dependency and bundled-asset inventory of the BeefTV runtime,
+see https://github.com/glanderness/BeefTV/blob/main/THIRD_PARTY_NOTICES.md (and
+`runtime/Contents/Resources/agent-host/licenses/THIRD_PARTY_NOTICES.md` inside a
+packaged macOS standalone runtime); this inventory is not a complete
+compatibility or corresponding-source audit. For the practical scope of the
+source-available policy, see
+https://github.com/glanderness/BeefTV/blob/main/docs/content/docs/overview/licensing.mdx.
