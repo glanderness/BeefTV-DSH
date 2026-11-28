@@ -6,7 +6,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import * as mcpClient from '@deepseek-ai/dsh-mcp-client'
 import {
-  attachLocalRuntime, awayGenerationNotice, bundledRuntimeDir, callOperation, defaultPluginSettings, generationToolSet, hasOperation, inspectWorkspace, localAppStatus,
+  attachLocalRuntime, awayGenerationNotice, bundledRuntimeDir, callOperation, currentSettingsVersion, defaultPluginSettings, generationToolSet, hasOperation, inspectWorkspace, localAppStatus,
   normalizeSettings, startLocalRuntime, startRuntime, validatedSettingsPatch, workspaceJSON,
 } from './runtime.js'
 import { createRuntimeStore } from './runtime-store.js'
@@ -46,7 +46,20 @@ function recordToolActivity(runtime, exec, result) {
   runtime.activity = { seq: (runtime.activity?.seq || 0) + 1, kind, canvasId }
 }
 
-export function createConnection({ ctx, pluginHome, runner, stepLimit, awaitingReady = Promise.resolve(), hasActiveToolCalls = () => false, runtimeStore = createRuntimeStore({ pluginHome, bundledDir: bundledRuntimeDir }) }) {
+export const defaultHealthCheckTimeoutMs = 5_000
+export const defaultHealthFailureThreshold = 3
+
+export function createConnection({
+  ctx,
+  pluginHome,
+  runner,
+  stepLimit,
+  awaitingReady = Promise.resolve(),
+  hasActiveToolCalls = () => false,
+  runtimeStore = createRuntimeStore({ pluginHome, bundledDir: bundledRuntimeDir }),
+  healthCheckTimeoutMs = defaultHealthCheckTimeoutMs,
+  healthFailureThreshold = defaultHealthFailureThreshold,
+}) {
   const settingsPath = join(pluginHome, 'connection.json')
   const pluginSettingsPath = join(pluginHome, 'settings.json')
   let current = null
@@ -72,7 +85,7 @@ export function createConnection({ ctx, pluginHome, runner, stepLimit, awaitingR
   let settingsUpdate = Promise.resolve()
 
   async function writePluginSettings() {
-    const value = { ...pluginSettings }
+    const value = { ...pluginSettings, settingsVersion: currentSettingsVersion }
     pluginSettingsWrite = pluginSettingsWrite.catch(() => {}).then(async () => {
       await mkdir(pluginHome, { recursive: true, mode: 0o700 })
       await writeFile(pluginSettingsPath, JSON.stringify(value), { mode: 0o600 })
@@ -81,9 +94,13 @@ export function createConnection({ ctx, pluginHome, runner, stepLimit, awaitingR
   }
 
   // 状态机不能只靠默认值启动：上次关掉「生成完自动继续」后，重启也必须保持关闭。
+  // 老版本落盘的 settings.json 若触发了默认步数上限迁移，启动时顺手写回新版版本号。
   const pluginSettingsReady = readFile(pluginSettingsPath, 'utf8').then(JSON.parse).then(value => {
     pluginSettings = normalizeSettings(value)
     runner.dispatch({ type: 'autoContinueRestored', autoContinue: pluginSettings.autoContinue })
+    if (value?.settingsVersion !== currentSettingsVersion || value?.stepLimit !== pluginSettings.stepLimit) {
+      void writePluginSettings().catch(() => {})
+    }
     return pluginSettings
   }).catch(() => {
     runner.dispatch({ type: 'autoContinueRestored', autoContinue: pluginSettings.autoContinue })
@@ -363,6 +380,10 @@ export function createConnection({ ctx, pluginHome, runner, stepLimit, awaitingR
     return status()
   }
 
+  function runtimeProcessExited(runtime) {
+    return Boolean(runtime?.owned && runtime?.child && (runtime.child.exitCode != null || runtime.child.signalCode != null))
+  }
+
   async function refreshConnection() {
     await awaitingReady
     if (switching || updatingRuntime) return status()
@@ -370,15 +391,20 @@ export function createConnection({ ctx, pluginHome, runner, stepLimit, awaitingR
       const previous = current
       if (previous) {
         try {
-          const health = await workspaceJSON(previous, '/api/health', { signal: AbortSignal.timeout(2000) })
+          const health = await workspaceJSON(previous, '/api/health', { signal: AbortSignal.timeout(healthCheckTimeoutMs) })
           if (!health.ready || !health.schema?.ready) throw new Error('工作区尚未就绪')
+          previous.consecutiveHealthFailures = 0
         } catch {
           if (current !== previous || switching) return status()
-          current = null
-          contexts.clear()
-          error = 'BeefTV 连接已中断，等待本机应用恢复'
-          runner.dispatch({ type: 'workspaceLost' })
-          await release(previous)
+          previous.consecutiveHealthFailures = (previous.consecutiveHealthFailures || 0) + 1
+          const threshold = Math.max(1, Number.isInteger(healthFailureThreshold) ? healthFailureThreshold : defaultHealthFailureThreshold)
+          if (runtimeProcessExited(previous) || previous.consecutiveHealthFailures >= threshold) {
+            current = null
+            contexts.clear()
+            error = 'BeefTV 连接已中断，等待本机应用恢复'
+            runner.dispatch({ type: 'workspaceLost' })
+            await release(previous)
+          }
         }
       }
       if (!current && desiredMode === 'local' && !switching) {
